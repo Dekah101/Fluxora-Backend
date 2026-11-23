@@ -696,6 +696,22 @@ webhooksRouter.get('/metrics', (req, res) => {
 webhooksRouter.post('/verify', express.raw({ type: 'application/json' }), (req, res) => {
   const requestId = req.correlationId;
 
+  // The signing secret must never travel in the query string: query strings
+  // are captured by access logs, proxies, browser history, and tracing
+  // attributes. Reject `?secret=` outright and require the
+  // `x-fluxora-test-secret` header instead.
+  if (req.query.secret !== undefined) {
+    res.status(400).json(
+      errorResponse(
+        'SECRET_IN_QUERY_STRING',
+        'The signing secret must be sent via the x-fluxora-test-secret header, not the query string',
+        undefined,
+        requestId
+      )
+    );
+    return;
+  }
+
   const contentType = req.header('content-type');
   const preflight = checkWebhookPreflight(req.body, contentType);
   if (!preflight.ok) {
@@ -705,7 +721,7 @@ webhooksRouter.post('/verify', express.raw({ type: 'application/json' }), (req, 
     return;
   }
 
-  const secret = typeof req.query.secret === 'string' ? req.query.secret : undefined;
+  const secret = req.header('x-fluxora-test-secret');
   const deliveryId = req.header('x-fluxora-delivery-id');
   const timestamp = req.header('x-fluxora-timestamp');
   const signature = req.header('x-fluxora-signature');

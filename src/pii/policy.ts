@@ -187,6 +187,11 @@ export const REQUEST_FIELD_POLICIES: Record<string, FieldPolicy> = {
     redactInLogs: true,
     rationale: 'Secret value in request body or response.',
   },
+  'x-fluxora-test-secret': {
+    classification: DataClassification.RESTRICTED,
+    redactInLogs: true,
+    rationale: 'Webhook signing secret supplied via the /internal/webhooks/verify header.',
+  },
   token: {
     classification: DataClassification.RESTRICTED,
     redactInLogs: true,

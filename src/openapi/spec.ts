@@ -2483,6 +2483,99 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/internal/webhooks/verify',
+  summary: 'Verify a webhook signature (consumer testing)',
+  description:
+    'Recomputes the HMAC-SHA256 signature for a raw JSON body so webhook consumers can exercise ' +
+    'the same verification path used for inbound deliveries. Requires admin Bearer authentication. ' +
+    'The signing secret MUST be supplied in the `x-fluxora-test-secret` header. Passing it as a ' +
+    '`?secret=` query parameter is rejected with `400 SECRET_IN_QUERY_STRING` because query ' +
+    'strings leak into access logs, proxies, browser history, and tracing attributes.',
+  tags: ['webhooks'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    headers: z.object({
+      'x-fluxora-test-secret': z
+        .string()
+        .openapi({ description: 'Webhook signing secret under test' }),
+      'x-fluxora-delivery-id': z
+        .string()
+        .openapi({ description: 'Stable delivery ID for deduplication' }),
+      'x-fluxora-timestamp': z.string().openapi({ description: 'Unix timestamp in seconds' }),
+      'x-fluxora-signature': z.string().openapi({ description: 'HMAC-SHA256 hex signature' }),
+    }),
+    body: {
+      required: true,
+      content: { 'application/json': { schema: z.record(z.string(), z.unknown()) } },
+    },
+  },
+  responses: {
+    '200': {
+      description: 'Signature verified',
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            data: z.object({
+              ok: z.literal(true),
+              code: z.string().openapi({ example: 'ok' }),
+              message: z.string(),
+            }),
+            meta: z.record(z.string(), z.unknown()),
+          }),
+          example: {
+            success: true,
+            data: {
+              ok: true,
+              code: 'ok',
+              message: 'Webhook signature verified',
+            },
+            meta: { timestamp: '2026-01-01T00:00:00.000Z', requestId: 'req_01HXYZ' },
+          },
+        },
+      },
+    },
+    '400': {
+      description:
+        'Malformed request — including a signing secret supplied in the `?secret=` query string ' +
+        '(code `SECRET_IN_QUERY_STRING`), an invalid timestamp, or invalid JSON',
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(false),
+            error: z.object({
+              code: z.string(),
+              message: z.string(),
+              requestId: z.string().optional(),
+            }),
+          }),
+          example: {
+            success: false,
+            error: {
+              code: 'SECRET_IN_QUERY_STRING',
+              message:
+                'The signing secret must be sent via the x-fluxora-test-secret header, not the query string',
+              requestId: 'req_01HXYZ',
+            },
+          },
+        },
+      },
+    },
+    '401': errorResponseWithExample(
+      'Missing secret/signature headers or signature verification failed',
+      'UNAUTHORIZED',
+      'Webhook signature verification failed'
+    ),
+    '413': errorResponseWithExample(
+      'Payload too large (> 256 KiB)',
+      'PAYLOAD_TOO_LARGE',
+      'Request payload exceeds the maximum allowed size'
+    ),
+  },
+});
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 registry.registerPath({

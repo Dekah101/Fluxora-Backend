@@ -181,5 +181,53 @@ describe('Webhooks Route Early-Return Safeguards & Error Paths', () => {
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toHaveProperty('code');
     });
+
+    it('rejects a signing secret supplied in the query string with 400', async () => {
+      const app = makeApp();
+
+      const res = await request(app)
+        .post('/internal/webhooks/verify?secret=test-secret')
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+        .set('Content-Type', 'application/json')
+        .send('{}');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('SECRET_IN_QUERY_STRING');
+    });
+
+    it('accepts the signing secret via the x-fluxora-test-secret header', async () => {
+      const app = makeApp();
+      const payload = JSON.stringify({ event: 'stream.created', data: { id: 's1' } });
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const signature = computeWebhookSignature('test-secret', timestamp, payload);
+
+      const res = await request(app)
+        .post('/internal/webhooks/verify')
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+        .set('x-fluxora-test-secret', 'test-secret')
+        .set('x-fluxora-delivery-id', 'deliv_verify_header_1')
+        .set('x-fluxora-timestamp', timestamp)
+        .set('x-fluxora-signature', signature)
+        .set('Content-Type', 'application/json')
+        .send(payload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.ok).toBe(true);
+      expect(res.body.data.code).toBe('ok');
+    });
+
+    it('still returns 401 when the header secret is missing', async () => {
+      const app = makeApp();
+
+      const res = await request(app)
+        .post('/internal/webhooks/verify')
+        .set('Authorization', `Bearer ${ADMIN_TOKEN}`)
+        .set('Content-Type', 'application/json')
+        .send('{}');
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('missing_secret');
+    });
   });
 });

@@ -274,8 +274,9 @@ Response:
 ### Verify Webhook Signature
 
 ```
-POST /internal/webhooks/verify?secret=webhook_secret_123
+POST /internal/webhooks/verify
 Content-Type: application/json
+x-fluxora-test-secret: webhook_secret_123
 x-fluxora-delivery-id: deliv_123
 x-fluxora-timestamp: 1710000000
 x-fluxora-signature: <hex-encoded-signature>

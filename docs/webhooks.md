@@ -352,6 +352,31 @@ When a webhook consumer rotates its signing secret via the admin API, there is a
 | `payload_too_large` | 413 | Request body exceeds the maximum allowed size. |
 | `duplicate_delivery` | 409 | Delivery ID has already been processed. |
 
+### Signature verification endpoint (testing)
+
+`POST /internal/webhooks/verify` exercises the same `verifyWebhookSignature` path used for inbound deliveries, so consumers can validate their signing implementation end-to-end. It requires admin Bearer authentication (`requireAdminAuth`).
+
+| Header | Description |
+|--------|-------------|
+| `x-fluxora-test-secret` | The webhook signing secret under test (**required**). |
+| `x-fluxora-delivery-id` | Unique identifier for the delivery (used for deduplication). |
+| `x-fluxora-timestamp` | Unix timestamp (seconds) at which the request was signed. |
+| `x-fluxora-signature` | HMAC-SHA256 hex digest of `{timestamp}.{rawBody}`. |
+
+```http
+POST /internal/webhooks/verify
+Authorization: Bearer <ADMIN_API_KEY>
+Content-Type: application/json
+x-fluxora-test-secret: <signing-secret>
+x-fluxora-delivery-id: deliv_123
+x-fluxora-timestamp: 1710000000
+x-fluxora-signature: <hex-encoded-signature>
+
+{"event": "stream.created", "data": {...}}
+```
+
+**The signing secret must be sent via the `x-fluxora-test-secret` header — never in the query string.** A request carrying `?secret=` is rejected with `400 SECRET_IN_QUERY_STRING` before verification runs, because secrets in query strings are captured by access logs, proxies, browser history, and tracing attributes. The `x-fluxora-test-secret` header is also covered by the PII redaction policy (`src/pii/policy.ts`), so it is stripped from any log or trace metadata that might record request headers.
+
 ## SSRF Protection
 
 All webhook target URLs are validated before any network call to prevent Server-Side Request Forgery (SSRF) attacks. This protection is applied in both the `WebhookDispatcher` class and the `dispatchWebhook` helper function.
